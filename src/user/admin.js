@@ -35,6 +35,7 @@ module.exports = function (User) {
 	User.getUsersCSV = async function () {
 		winston.verbose('[user/getUsersCSV] Compiling User CSV data');
 
+		console.log("Eric was here");
 		const data = await plugins.hooks.fire('filter:user.csvFields', { fields: ['uid', 'email', 'username'] });
 		let csvContent = `${data.fields.join(',')}\n`;
 		async function processUids(uids) {
