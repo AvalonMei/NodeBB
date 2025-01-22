@@ -37,13 +37,17 @@ module.exports = function (User) {
 
 		const data = await plugins.hooks.fire('filter:user.csvFields', { fields: ['uid', 'email', 'username'] });
 		let csvContent = `${data.fields.join(',')}\n`;
-		await batch.processSortedSet('users:joindate', async (uids) => {
+		async function processUids(uids) {
 			const usersData = await User.getUsersFields(uids, data.fields);
-			csvContent += usersData.reduce((memo, user) => {
+	
+			const csvChunk = usersData.reduce((memo, user) => {
 				memo += `${data.fields.map(field => user[field]).join(',')}\n`;
 				return memo;
 			}, '');
-		}, {});
+	
+			csvContent += csvChunk;
+		}
+		await batch.processSortedSet('users:joindate', processUids, {});
 
 		return csvContent;
 	};
