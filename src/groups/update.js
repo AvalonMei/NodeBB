@@ -31,7 +31,18 @@ module.exports = function (Groups) {
 				values[prop] = values[prop] === 'true' || parseInt(values[prop], 10) === 1;
 			}
 		});
+		const payload = preparePayload(values);
 
+		await handleOptionalUpdates(groupName, values, payload);
+		await db.setObject(`group:${groupName}`, payload);
+		await finalizeGroupUpdate(groupName, values);
+		plugins.hooks.fire('action:group.update', {
+			name: groupName,
+			values: values,
+		});
+	};
+
+	function preparePayload(values) {
 		const payload = {
 			description: values.description || '',
 			icon: values.icon || '',
@@ -39,30 +50,22 @@ module.exports = function (Groups) {
 			textColor: values.textColor || '#ffffff',
 		};
 
+		const booleanToNumeric = prop => (values[prop] ? '1' : '0');
+
 		if (values.hasOwnProperty('userTitle')) {
 			payload.userTitle = values.userTitle || '';
 		}
 
-		if (values.hasOwnProperty('userTitleEnabled')) {
-			payload.userTitleEnabled = values.userTitleEnabled ? '1' : '0';
-		}
+		['userTitleEnabled', 'hidden', 'private', 'disableJoinRequests', 'disableLeave'].forEach((prop) => {
+			if (values.hasOwnProperty(prop)) {
+				payload[prop] = booleanToNumeric(prop);
+			}
+		});
 
-		if (values.hasOwnProperty('hidden')) {
-			payload.hidden = values.hidden ? '1' : '0';
-		}
+		return payload;
+	}
 
-		if (values.hasOwnProperty('private')) {
-			payload.private = values.private ? '1' : '0';
-		}
-
-		if (values.hasOwnProperty('disableJoinRequests')) {
-			payload.disableJoinRequests = values.disableJoinRequests ? '1' : '0';
-		}
-
-		if (values.hasOwnProperty('disableLeave')) {
-			payload.disableLeave = values.disableLeave ? '1' : '0';
-		}
-
+	async function handleOptionalUpdates(groupName, values, payload) {
 		if (values.hasOwnProperty('name')) {
 			await checkNameChange(groupName, values.name);
 		}
@@ -80,16 +83,13 @@ module.exports = function (Groups) {
 			const cidsArray = values.memberPostCids.split(',').map(cid => parseInt(cid.trim(), 10)).filter(Boolean);
 			payload.memberPostCids = cidsArray.filter(cid => validCids.includes(cid)).join(',') || '';
 		}
+	}
 
-		await db.setObject(`group:${groupName}`, payload);
-		await Groups.renameGroup(groupName, values.name);
-
-		plugins.hooks.fire('action:group.update', {
-			name: groupName,
-			values: values,
-		});
-	};
-
+	async function finalizeGroupUpdate(groupName, values) {
+		if (values.hasOwnProperty('name')) {
+			await Groups.renameGroup(groupName, values.name);
+		}
+	}
 	async function updateVisibility(groupName, hidden) {
 		if (hidden) {
 			await db.sortedSetRemoveBulk([
